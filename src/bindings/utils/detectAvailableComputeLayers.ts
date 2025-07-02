@@ -9,6 +9,28 @@ import {asyncSome} from "./asyncSome.js";
 import {asyncEvery} from "./asyncEvery.js";
 
 
+async function detectSyclSupport({
+    platform
+}: {
+    platform: BinaryPlatform
+}) {
+    if (platform === "win") {
+        const oneapiRoot = process.env.ONEAPI_ROOT;
+        if (oneapiRoot == null)
+            return false;
+
+        return await fs.pathExists(path.join(oneapiRoot, "compiler", "latest", "bin", "sycl-ls.exe"));
+    } else if (platform === "linux") {
+        const oneapiRoot = process.env.ONEAPI_ROOT;
+        if (oneapiRoot == null)
+            return false;
+
+        return await fs.pathExists(path.join(oneapiRoot, "compiler", "latest", "linux", "bin", "sycl-ls"));
+    }
+
+    return false;
+}
+
 export async function detectAvailableComputeLayers({
     platform = getPlatform()
 }: {
@@ -17,17 +39,20 @@ export async function detectAvailableComputeLayers({
     const [
         cuda,
         vulkan,
-        metal
+        metal,
+        sycl
     ] = await Promise.all([
         detectCudaSupport({platform}),
         detectVulkanSupport({platform}),
-        detectMetalSupport({platform})
+        detectMetalSupport({platform}),
+        detectSyclSupport({platform})
     ]);
 
     return {
         cuda,
         vulkan,
-        metal
+        metal,
+        sycl
     };
 }
 
