@@ -103,6 +103,17 @@ if (GGML_VULKAN OR GGML_KOMPUTE)
     else()
         message(FATAL_ERROR "Vulkan was not found")
     endif()
+elseif (GGML_SYCL)    
+    message(STATUS "Using SYCL for GPU info")
+
+    list(APPEND GPU_INFO_HEADERS gpuInfo/sycl-gpu-info.h)
+    list(APPEND GPU_INFO_SOURCES gpuInfo/sycl-gpu-info.cpp)
+
+    add_compile_definitions(GPU_INFO_USE_SYCL)
+
+    # SYCL libraries are typically linked by the compiler itself when using icx/icpx
+    # However, if specific SYCL libraries are needed, they would be added here.
+    # For example: list(APPEND GPU_INFO_EXTRA_LIBS OpenCL::OpenCL)
 endif()
 
 list(REMOVE_DUPLICATES GPU_INFO_HEADERS)

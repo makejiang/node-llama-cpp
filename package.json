@@ -89,6 +89,7 @@
     "metal",
     "cuda",
     "vulkan",
+    "sycl",
     "grammar",
     "embedding",
     "rerank",
@@ -233,6 +234,7 @@
     "@node-llama-cpp/win-arm64": "0.1.0",
     "@node-llama-cpp/win-x64": "0.1.0",
     "@node-llama-cpp/win-x64-cuda": "0.1.0",
-    "@node-llama-cpp/win-x64-vulkan": "0.1.0"
+    "@node-llama-cpp/win-x64-vulkan": "0.1.0",
+    "@node-llama-cpp/win-x64-sycl": "0.1.0"
   }
 }

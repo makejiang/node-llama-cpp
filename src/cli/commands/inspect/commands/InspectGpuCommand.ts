@@ -35,11 +35,17 @@ export const InspectGpuCommand: CommandModule<object, InspectGpuCommand> = {
 
         async function loadLlamaForGpu(gpu: BuildGpu) {
             if (!gpuToLlama.has(gpu)) {
-                const loadedLlama = await getLlamaForGpu(gpu);
-                gpuToLlama.set(gpu, loadedLlama);
+              const loadedLlama = await getLlamaForGpu(gpu);
+              gpuToLlama.set(gpu, loadedLlama);
 
-                if (loadedLlama != null)
-                    lastLlama = loadedLlama;
+              if (loadedLlama != null) {
+                  console.log(`Successfully loaded Llama for GPU: ${gpu}`);
+                  lastLlama = loadedLlama;
+              } else {
+                  console.log(`Failed to load Llama for GPU: ${gpu}`);
+              }
+            } else {
+              console.log(`GPU ${gpu} already cached`);
             }
 
             return gpuToLlama.get(gpu);
@@ -126,6 +132,18 @@ export const InspectGpuCommand: CommandModule<object, InspectGpuCommand> = {
             } else {
                 console.info(`${chalk.yellow("CUDA:")} ${chalk.green("available")}`);
                 gpusToLogVramUsageOf.push("cuda");
+            }
+        }
+        
+        if (availableComputeLayers.sycl) {
+            const llama = await loadLlamaForGpu("sycl");
+
+            if (llama == null) {
+                console.info(`${chalk.yellow("SYCL:")} ${chalk.red("SYCL is detected, but using it failed")}`);
+                console.info(chalk.yellow("To resolve errors related to SYCL, see the SYCL guide: ") + documentationPageUrls.SYCL);
+            } else {
+                console.info(`${chalk.yellow("SYCL:")} ${chalk.green("available")}`);
+                gpusToLogVramUsageOf.push("sycl");
             }
         }
 

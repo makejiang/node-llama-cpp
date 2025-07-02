@@ -98,6 +98,8 @@ std::pair<ggml_backend_dev_t, std::string> getGpuDevice() {
             return std::pair<ggml_backend_dev_t, std::string>(device, "metal");
         } else if (std::string(deviceName).find("Vulkan") == 0) {
             return std::pair<ggml_backend_dev_t, std::string>(device, "vulkan");
+        } else if (std::string(deviceName).find("SYCL") == 0) {
+            return std::pair<ggml_backend_dev_t, std::string>(device, "sycl");
         } else if (std::string(deviceName).find("CUDA") == 0 || std::string(deviceName).find("ROCm") == 0 || std::string(deviceName).find("MUSA") == 0) {
             return std::pair<ggml_backend_dev_t, std::string>(device, "cuda");
         }

@@ -641,7 +641,6 @@ async function loadExistingLlamaBinary({
     pipeBinaryTestErrorLogs: boolean
 }) {
     const buildFolderName = await getBuildFolderNameForBuildOptions(buildOptions);
-
     const localBuildFolder = path.join(llamaLocalBuildBinsDirectory, buildFolderName.withCustomCmakeOptions);
     const localBuildBinPath = await getLocalBuildBinaryPath(buildFolderName.withCustomCmakeOptions);
 
@@ -704,6 +703,7 @@ async function loadExistingLlamaBinary({
                 ? buildFolderName.withCustomCmakeOptions
                 : buildFolderName.withoutCustomCmakeOptions
         );
+        console.log(getConsoleLogPrefix() + `Looking for prebuilt binary at ${prebuiltBinDetails?.binaryPath ?? "not found"}`);
 
         if (prebuiltBinDetails != null) {
             try {
@@ -719,6 +719,8 @@ async function loadExistingLlamaBinary({
                     ? await testBindingBinary(resolvedBindingPath, buildOptions.gpu, undefined, pipeBinaryTestErrorLogs)
                     : true;
 
+                console.log(getConsoleLogPrefix() + `Prebuilt binary found at ${resolvedBindingPath}, testing compatibility: ${binaryCompatible}`);
+                
                 if (binaryCompatible) {
                     const binding = loadBindingModule(resolvedBindingPath);
 

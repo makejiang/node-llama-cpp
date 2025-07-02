@@ -2,12 +2,78 @@ import process from "process";
 import path from "path";
 import fs from "fs-extra";
 import semver from "semver";
+import { exec } from "child_process";
+import { promisify } from "util";
 import {getConsoleLogPrefix} from "../../utils/getConsoleLogPrefix.js";
 import {BinaryPlatform, getPlatform} from "./getPlatform.js";
 import {hasFileInPath} from "./hasFileInPath.js";
 import {asyncSome} from "./asyncSome.js";
 import {asyncEvery} from "./asyncEvery.js";
 
+
+
+const execAsync = promisify(exec);
+
+async function getArcGpuDeviceNames({
+    platform
+}: {
+    platform: BinaryPlatform
+}): Promise<string[]> {
+    
+    try {
+      if (platform === "win") {
+        // Use PowerShell Get-CimInstance (modern replacement for WMI)
+        const { stdout } = await execAsync(
+          'powershell -Command "Get-CimInstance -ClassName Win32_VideoController | Select-Object -ExpandProperty Name"'
+        );
+        
+        return stdout
+          .split('\n')
+          .map(line => line.trim())
+          .filter(name => name.length > 0 && name.toLowerCase().includes('arc'));
+      } else if (platform === "linux") {
+        // Use lspci command on Linux
+        const { stdout } = await execAsync('lspci | grep -i "vga\\|3d\\|display"');
+        
+        return stdout
+          .split('\n')
+          .filter(line => line.trim().length > 0)
+          .map(line => {
+            const match = line.match(/(?:VGA compatible controller|3D controller|Display controller): (.+)/);
+            return match && match[1] ? match[1].trim() : line.trim();
+          })
+          .filter(name => name.toLowerCase().includes('arc'));
+      } else if (platform === "mac") {
+        // Use system_profiler on macOS
+        const { stdout } = await execAsync('system_profiler SPDisplaysDataType | grep "Chipset Model"');
+        
+        return stdout
+          .split('\n')
+          .filter(line => line.includes('Chipset Model'))
+          .map(line => line.split(':')[1]?.trim())
+          .filter(name => name && name.length > 0 && name.toLowerCase().includes('arc')) as string[];
+      }
+    } catch (error) {
+      console.error(getConsoleLogPrefix() + 'Failed to get GPU device names:', error);
+    }
+    
+    return [];
+}
+
+async function detectSyclSupport({
+    platform
+}: {
+    platform: BinaryPlatform
+}) {
+  const gpuDeviceNames = await getArcGpuDeviceNames({platform});
+  if (gpuDeviceNames.length > 0) {
+      console.log(getConsoleLogPrefix() + `Detected Intel Arc GPU(s): ${gpuDeviceNames.join(", ")}`);
+      return true;
+  }
+  
+  console.log(getConsoleLogPrefix() + "No Intel Arc GPU detected.");
+  return false;
+}
 
 export async function detectAvailableComputeLayers({
     platform = getPlatform()
@@ -17,17 +83,20 @@ export async function detectAvailableComputeLayers({
     const [
         cuda,
         vulkan,
-        metal
+        metal,
+        sycl
     ] = await Promise.all([
         detectCudaSupport({platform}),
         detectVulkanSupport({platform}),
-        detectMetalSupport({platform})
+        detectMetalSupport({platform}),
+        detectSyclSupport({platform})
     ]);
 
     return {
         cuda,
         vulkan,
-        metal
+        metal,
+        sycl
     };
 }
 

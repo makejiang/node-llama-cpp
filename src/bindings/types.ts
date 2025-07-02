@@ -2,8 +2,8 @@ import process from "process";
 import {BinaryPlatform} from "./utils/getPlatform.js";
 import {BinaryPlatformInfo} from "./utils/getPlatformInfo.js";
 
-export const buildGpuOptions = ["metal", "cuda", "vulkan", false] as const;
-export type LlamaGpuType = "metal" | "cuda" | "vulkan" | false;
+export const buildGpuOptions = ["metal", "cuda", "sycl", "vulkan", false] as const;
+export type LlamaGpuType = "metal" | "cuda" | "sycl" | "vulkan" | false;
 export const nodeLlamaCppGpuOptions = [
     "auto",
     ...buildGpuOptions

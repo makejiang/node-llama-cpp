@@ -93,7 +93,7 @@ export async function compileLlamaCpp(buildOptions: BuildOptions, compileOptions
                     await downloadCmakeIfNeeded(buildOptions.progressLogs);
 
                 const cmakePathArgs = await getCmakePathArgs();
-                const cmakeGeneratorArgs = getCmakeGeneratorArgs(buildOptions.platform, buildOptions.arch, useWindowsLlvm);
+                const cmakeGeneratorArgs = getCmakeGeneratorArgs(buildOptions.platform, buildOptions.arch, useWindowsLlvm, buildOptions.gpu);
                 const toolchainFile = await getToolchainFileForArch(buildOptions.arch, useWindowsLlvm);
                 const runtimeVersion = nodeTarget.startsWith("v") ? nodeTarget.slice("v".length) : nodeTarget;
                 const cmakeCustomOptions = new Map(buildOptions.customCmakeOptions);
@@ -126,6 +126,14 @@ export async function compileLlamaCpp(buildOptions: BuildOptions, compileOptions
 
                 if (buildOptions.gpu === "vulkan" && !cmakeCustomOptions.has("GGML_VULKAN"))
                     cmakeCustomOptions.set("GGML_VULKAN", "1");
+
+                if (buildOptions.gpu === "sycl" && !cmakeCustomOptions.has("GGML_SYCL")) {
+                    cmakeCustomOptions.set("GGML_SYCL", "ON");
+                    if (platform === "win") {
+                        cmakeCustomOptions.set("CMAKE_C_COMPILER", "icx");
+                        cmakeCustomOptions.set("CMAKE_CXX_COMPILER", "icx");
+                    }
+                }
 
                 if (!cmakeCustomOptions.has("GGML_CCACHE"))
                     cmakeCustomOptions.set("GGML_CCACHE", "OFF");
@@ -169,30 +177,33 @@ export async function compileLlamaCpp(buildOptions: BuildOptions, compileOptions
                     buildOptions.progressLogs
                 );
 
-                await spawnCommand(
-                    "npm",
-                    [
-                        "run", "-s", "cmake-js-llama", "--", "compile",
-                        "--log-level", "warn",
-                        "--config", buildConfigType,
-                        "--arch=" + buildOptions.arch,
-                        "--out", path.relative(llamaDirectory, outDirectory),
-                        "--runtime-version=" + runtimeVersion,
-                        "--parallel=" + parallelBuildThreads,
-                        ...cmakeGeneratorArgs,
-                        ...cmakePathArgs,
-                        ...(
-                            [
-                                ...cmakeCustomOptions,
-                                ...cmakeToolchainOptions
-                            ].map(([key, value]) => "--CD" + key + "=" + value)
-                        )
-                    ],
-                    __dirname,
-                    envVars,
-                    buildOptions.progressLogs
-                );
+                const compileCommand = [
+                    "run", "-s", "cmake-js-llama", "--", "compile",
+                    "--log-level", "warn",
+                    "--config", buildConfigType,
+                    "--arch=" + buildOptions.arch,
+                    "--out", path.relative(llamaDirectory, outDirectory),
+                    "--runtime-version=" + runtimeVersion,
+                    "--parallel=" + parallelBuildThreads,
+                    ...cmakeGeneratorArgs,
+                    ...cmakePathArgs,
+                    ...(
+                        [
+                            ...cmakeCustomOptions,
+                            ...cmakeToolchainOptions
+                        ].map(([key, value]) => "--CD" + key + "=" + value)
+                    )
+                ];
+                console.log(getConsoleLogPrefix() + "Running compile command:", compileCommand.join(" "));
 
+                await spawnCommand(
+                        "npm",
+                        compileCommand,
+                        __dirname,
+                        envVars,
+                        buildOptions.progressLogs
+                    );
+                
                 const compiledResultDirPath = await moveBuildFilesToResultDir(outDirectory);
 
                 await fs.writeFile(path.join(compiledResultDirPath, buildMetadataFileName), JSON.stringify({
@@ -343,6 +354,9 @@ export async function getLocalBuildBinaryPath(folderName: string) {
     const binaryPath = path.join(llamaLocalBuildBinsDirectory, folderName, buildConfigType, "llama-addon.node");
     const buildMetadataFilePath = path.join(llamaLocalBuildBinsDirectory, folderName, buildConfigType, buildMetadataFileName);
     const buildDoneStatusPath = path.join(llamaLocalBuildBinsDirectory, folderName, "buildDone.status");
+    //console.log(getConsoleLogPrefix() + `Looking for a local build binary at ${binaryPath}`);
+    //console.log(getConsoleLogPrefix() + `Looking for build metadata file at ${buildMetadataFilePath}`);
+    //console.log(getConsoleLogPrefix() + `Looking for build done status file at ${buildDoneStatusPath}`);    
 
     const [
         binaryExists,
@@ -371,9 +385,13 @@ export async function getLocalBuildBinaryBuildMetadata(folderName: string) {
 }
 
 export async function getPrebuiltBinaryPath(buildOptions: BuildOptions, folderName: string) {
+    console.log(getConsoleLogPrefix() + `Looking for prebuilt binary for build options: ${JSON.stringify(buildOptions)}`);
+    console.log(getConsoleLogPrefix() + `Using folder name: ${folderName}`);
+
     const localPrebuiltBinaryDirectoryPath = path.join(llamaPrebuiltBinsDirectory, folderName);
 
     const binaryPath = await resolvePrebuiltBinaryPath(localPrebuiltBinaryDirectoryPath);
+    console.log(getConsoleLogPrefix() + `Looking for prebuilt binary at ${binaryPath ?? "not found"} from ${localPrebuiltBinaryDirectoryPath}`);
 
     if (binaryPath != null)
         return {
@@ -383,11 +401,15 @@ export async function getPrebuiltBinaryPath(buildOptions: BuildOptions, folderNa
         };
 
     const packagePrebuiltBinariesDirectoryPath = await getPrebuiltBinariesPackageDirectoryForBuildOptions(buildOptions);
-    if (packagePrebuiltBinariesDirectoryPath == null)
+    if (packagePrebuiltBinariesDirectoryPath == null){
+        console.warn(getConsoleLogPrefix() + "Could not find prebuilt binaries package for the current build options");
         return null;
+    }
+        
 
     const packagePrebuiltBinaryDirectoryPath = path.join(packagePrebuiltBinariesDirectoryPath, folderName);
     const binaryPathFromPackage = await resolvePrebuiltBinaryPath(packagePrebuiltBinaryDirectoryPath);
+    console.log(getConsoleLogPrefix() + `Looking for prebuilt binary in package at ${binaryPathFromPackage ?? "not found"} from ${packagePrebuiltBinaryDirectoryPath}`);
 
     if (binaryPathFromPackage != null)
         return {
@@ -409,12 +431,13 @@ export async function getPrebuiltBinaryBuildMetadata(folderPath: string, folderN
     return buildMetadata;
 }
 
-async function moveBuildFilesToResultDir(outDirectory: string, canCreateReleaseDir: boolean = false) {
+async function moveBuildFilesToResultDir(outDirectory: string, canCreateReleaseDir: boolean = true) {
     const binFilesDirPaths = [
         path.join(outDirectory, "bin"),
         path.join(outDirectory, "llama.cpp", "bin")
     ];
     const compiledResultDirPath = path.join(outDirectory, buildConfigType);
+    console.log(getConsoleLogPrefix() + `Moving build files to "${compiledResultDirPath}" directory`);
 
     if (!await fs.pathExists(compiledResultDirPath)) {
         if (canCreateReleaseDir) {
@@ -439,6 +462,18 @@ async function moveBuildFilesToResultDir(outDirectory: string, canCreateReleaseD
             );
         }
     }
+    
+    // copy outDirectory/llama-addon.node to compiledResultDirPath
+    const llamaAddonNodePath = path.join(outDirectory, "llama-addon.node");
+    console.log(getConsoleLogPrefix() + `Copying ${llamaAddonNodePath} to "${compiledResultDirPath}" directory`);
+    if (await fs.pathExists(llamaAddonNodePath)) {
+        await fs.copy(llamaAddonNodePath, path.join(compiledResultDirPath, "llama-addon.node"), {
+            overwrite: false
+        });
+    } else {
+        throw new Error(`Could not find llama-addon.node in ${outDirectory}`);
+    }
+
 
     await applyResultDirFixes(compiledResultDirPath, path.join(outDirectory, "_temp"));
 
@@ -530,6 +565,9 @@ function getPrebuiltBinariesPackageDirectoryForBuildOptions(buildOptions: BuildO
             else if (buildOptions.gpu === "vulkan")
                 // @ts-ignore
                 return getBinariesPathFromModules(() => import("@node-llama-cpp/linux-x64-vulkan"));
+            else if (buildOptions.gpu === "sycl")
+                // @ts-ignore
+                return getBinariesPathFromModules(() => import("@node-llama-cpp/linux-x64-sycl"));
             else if (buildOptions.gpu === false)
                 // @ts-ignore
                 return getBinariesPathFromModules(() => import("@node-llama-cpp/linux-x64"));
@@ -547,6 +585,9 @@ function getPrebuiltBinariesPackageDirectoryForBuildOptions(buildOptions: BuildO
             else if (buildOptions.gpu === "vulkan")
                 // @ts-ignore
                 return getBinariesPathFromModules(() => import("@node-llama-cpp/win-x64-vulkan"));
+            else if (buildOptions.gpu === "sycl")
+                // @ts-ignore
+                return getBinariesPathFromModules(() => import("@node-llama-cpp/win-x64-sycl"));
             else if (buildOptions.gpu === false)
                 // @ts-ignore
                 return getBinariesPathFromModules(() => import("@node-llama-cpp/win-x64"));
@@ -594,11 +635,13 @@ async function getToolchainFileForArch(targetArch: string, windowsLlvmSupport: b
     return null;
 }
 
-function getCmakeGeneratorArgs(targetPlatform: BinaryPlatform, targetArch: string, windowsLlvmSupport: boolean) {
+function getCmakeGeneratorArgs(targetPlatform: BinaryPlatform, targetArch: string, windowsLlvmSupport: boolean, gpu: BuildGpu) {
     if (targetPlatform === "win" && targetArch === "arm64")
         return ["--generator", "Ninja Multi-Config"];
     else if (windowsLlvmSupport && targetPlatform === "win" && process.arch === "x64" && targetArch === "x64")
         return ["--generator", "Ninja Multi-Config"];
+    else if (targetPlatform === "win" && gpu === "sycl")
+        return ["--generator", "Ninja"];
 
     return [];
 }

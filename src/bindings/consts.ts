@@ -3,7 +3,8 @@ import {BuildGpu} from "./types.js";
 const prettyBuildGpuNames: Record<Exclude<BuildGpu, false>, string> = {
     metal: "Metal",
     cuda: "CUDA",
-    vulkan: "Vulkan"
+    vulkan: "Vulkan",
+    sycl: "SYCL"
 };
 
 export function getPrettyBuildGpuName(gpu: BuildGpu | undefined) {

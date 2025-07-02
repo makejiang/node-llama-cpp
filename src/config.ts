@@ -97,6 +97,7 @@ const documentationCliUrl = documentationUrl + "/cli";
 export const documentationPageUrls = {
     CUDA: documentationUrl + "/guide/CUDA",
     Vulkan: documentationUrl + "/guide/vulkan",
+    SYCL: documentationUrl + "/guide/sycl",
     CLI: {
         index: documentationCliUrl,
         Pull: documentationCliUrl + "/pull",

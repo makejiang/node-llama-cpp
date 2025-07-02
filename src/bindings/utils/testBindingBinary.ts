@@ -60,6 +60,7 @@ export async function testBindingBinary(
     async function getForkFunction() {
         if (runningInElectron) {
             try {
+                console.log(getConsoleLogPrefix() + `Running in Electron, attempting to use utilityProcess.fork`);
                 const {utilityProcess} = await import("electron");
 
                 return {
@@ -67,10 +68,11 @@ export async function testBindingBinary(
                     fork: utilityProcess.fork.bind(utilityProcess)
                 } as const;
             } catch (err) {
-                // do nothing
+                console.error(getConsoleLogPrefix() + `Failed to import Electron utilityProcess, falling back to Node.js fork:`, err);
             }
         }
 
+        console.log(getConsoleLogPrefix() + `Using Node.js child_process.fork`);
         return {
             type: "node",
             fork
@@ -212,16 +214,20 @@ export async function testBindingBinary(
     return Promise.race([
         new Promise<boolean>((_, reject) => {
             timeoutHandle = setTimeout(() => {
+                console.error(getConsoleLogPrefix() + `Binding binary test timed out after ${testTimeout}ms. Binary path: ${bindingBinaryPath}, GPU: ${gpu}`);
                 reject(new Error("Binding binary load test timed out"));
                 cleanup();
             }, testTimeout);
         }),
         new Promise<boolean>((resolve, reject) => {
             function done() {
-                if (!forkSucceeded)
+                if (!forkSucceeded) {
+                    console.error(getConsoleLogPrefix() + `Failed to create test subprocess. File: ${__filename}, GPU: ${gpu}, Binary: ${bindingBinaryPath}`);
                     reject(new Error(`Binding binary test failed to run a test process via file "${__filename}"`));
-                else
+                } else {
+                    console.log(getConsoleLogPrefix() + `Test completed. Passed: ${testPassed}, GPU: ${gpu}, Binary: ${bindingBinaryPath}`);
                     resolve(testPassed);
+                }
 
                 cleanup();
             }
@@ -248,8 +254,10 @@ export async function testBindingBinary(
                     }
                 },
                 onExit(code: number) {
-                    if (code !== 0)
+                    if (code !== 0) {
+                        console.error(getConsoleLogPrefix() + `Test subprocess exited with non-zero code: ${code}. GPU: ${gpu}, Binary: ${bindingBinaryPath}`);
                         testPassed = false;
+                    }
 
                     done();
                 }
@@ -267,17 +275,20 @@ if (process.env.TEST_BINDING_CP === "true" && (process.parentPort != null || pro
         ? (message: ChildToParentMessage) => process.parentPort.postMessage(message)
         : (message: ChildToParentMessage) => process.send!(message);
     const onMessage = async (message: ParentToChildMessage) => {
+        console.log(getConsoleLogPrefix() + `Received message: ${JSON.stringify(message)}`);
         if (message.type === "start") {
             try {
+                console.log(getConsoleLogPrefix() + `Attempting to load binding binary: ${message.bindingBinaryPath}`);
                 binding = require(message.bindingBinaryPath);
 
                 const errorLogLevel = LlamaLogLevelToAddonLogLevel.get(LlamaLogLevel.error);
                 if (errorLogLevel != null)
                     binding.setLoggerLogLevel(errorLogLevel);
 
+                console.log(getConsoleLogPrefix() + `Successfully loaded binding binary: ${message.bindingBinaryPath}`);
                 sendMessage({type: "loaded"});
             } catch (err) {
-                console.error(err);
+                console.error(getConsoleLogPrefix() + `Failed to load binding binary: ${message.bindingBinaryPath}. Error:`, err);
                 process.exit(1);
             }
         } else if (message.type === "test") {
@@ -285,32 +296,48 @@ if (process.env.TEST_BINDING_CP === "true" && (process.parentPort != null || pro
                 if (binding == null)
                     throw new Error("Binding binary is not loaded");
 
+                console.log(getConsoleLogPrefix() + `Starting binding test for GPU: ${message.gpu}`);
+                
+                console.log(getConsoleLogPrefix() + `Loading backends...`);
                 binding.loadBackends();
                 const loadedGpu = binding.getGpuType();
-                if (loadedGpu == null || (loadedGpu === false && message.gpu !== false))
-                    binding.loadBackends(path.dirname(path.resolve(message.bindingBinaryPath)));
+                console.log(getConsoleLogPrefix() + `Loaded GPU type: ${loadedGpu}`);
 
+                if (loadedGpu == null || (loadedGpu === false && message.gpu !== false)) {
+                    console.log(getConsoleLogPrefix() + `Reloading backends with binary directory: ${path.dirname(path.resolve(message.bindingBinaryPath))}`);
+                    binding.loadBackends(path.dirname(path.resolve(message.bindingBinaryPath)));
+                }
+
+                console.log(getConsoleLogPrefix() + `Initializing binding...`);
                 await binding.init();
+                
+                console.log(getConsoleLogPrefix() + `Getting GPU VRAM info...`);
                 binding.getGpuVramInfo();
+                
+                console.log(getConsoleLogPrefix() + `Getting GPU device info...`);
                 binding.getGpuDeviceInfo();
 
                 const gpuType = binding.getGpuType();
-                void (gpuType as BuildGpu satisfies typeof gpuType);
-                if (gpuType !== message.gpu)
-                    throw new Error(
-                        "Binary GPU type mismatch. " +
-                        `Expected: ${message.gpu}, got: ${gpuType}. ` + (
-                            message.gpu === "cuda"
-                                ? "May be due to a linker issue, ensure you don't have multiple conflicting CUDA installations."
-                                : "May be due to a linker issue, ensure the native dependencies are not broken."
-                        )
+                console.log(getConsoleLogPrefix() + `Final GPU type: ${gpuType}`);
+                
+                void (gpuType as (BuildGpu) satisfies typeof gpuType);
+                if (gpuType !== message.gpu) {
+                    const errorMsg = `Binary GPU type mismatch. Expected: ${message.gpu}, got: ${gpuType}. ` + (
+                        message.gpu === "cuda"
+                            ? "May be due to a linker issue, ensure you don't have multiple conflicting CUDA installations."
+                            : "May be due to a linker issue, ensure the native dependencies are not broken."
                     );
+                    console.error(getConsoleLogPrefix() + errorMsg);
+                    throw new Error(errorMsg);
+                }
 
+                console.log(getConsoleLogPrefix() + `Ensuring GPU device is supported...`);
                 binding.ensureGpuDeviceIsSupported();
 
+                console.log(getConsoleLogPrefix() + `All binding tests passed successfully`);
                 sendMessage({type: "done"});
             } catch (err) {
-                console.error(err);
+                console.error(getConsoleLogPrefix() + `Binding test failed:`, err);
                 process.exit(1);
             }
         } else if (message.type === "exit") {
