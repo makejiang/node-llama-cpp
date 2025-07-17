@@ -22,6 +22,7 @@ async function getArcGpuDeviceNames({
     
     try {
       if (platform === "win") {
+        // Use PowerShell Get-CimInstance (modern replacement for WMI)
         const { stdout } = await execAsync(
           `powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-WmiObject Win32_VideoController | ForEach-Object { if ($_.ConfigManagerErrorCode -eq 0 -and $_.PNPDeviceID -match 'VEN_([0-9A-F]{4}).*DEV_([0-9A-F]{4})') { 'Name: ' + $_.Name + ' VID: ' + $matches[1] + ' DeviceID: ' + $matches[2] }}"`,
           { encoding: 'utf-8' }
@@ -34,7 +35,10 @@ async function getArcGpuDeviceNames({
             if (line.length === 0) return false;
 
             const deviceId = line.match(/DeviceID: ([0-9A-F]{4})/i)?.[1]?.toUpperCase();
-            //console.log('Matched DeviceID:', deviceId); // 打印 deviceId
+            const VendorId = line.match(/VID: ([0-9A-F]{4})/i)?.[1]?.toUpperCase();
+            // console.log('Matched DeviceID:', deviceId); // 打印 deviceId
+            // console.log('Matched VendorId:', VendorId); // 打印 VendorId
+            if(VendorId != '8086') return false;
             if (!deviceId) return false;
             const targetDeviceIds = [
               '7D55', '64A0', '7D45', '7D40',
