@@ -62,6 +62,7 @@ export async function compileLlamaCpp(buildOptions: BuildOptions, compileOptions
         (
             buildOptions.gpu === false ||
             (buildOptions.gpu === "vulkan" && buildOptions.arch === "arm64") // Vulkan can't be compiled on Windows x64 with LLVM ATM
+            
         ) &&
         !ignoreWorkarounds.includes("avoidWindowsLlvm") &&
         !buildOptions.customCmakeOptions.has("CMAKE_TOOLCHAIN_FILE") &&
@@ -69,6 +70,7 @@ export async function compileLlamaCpp(buildOptions: BuildOptions, compileOptions
     )
         ? areWindowsBuildToolsCapableForLlvmBuild(await detectWindowsBuildTools())
         : false;
+    console.log(getConsoleLogPrefix() + `useWindowsLlvm: ${useWindowsLlvm}`);
 
     const outDirectory = path.join(llamaLocalBuildBinsDirectory, finalBuildFolderName);
 
@@ -128,11 +130,9 @@ export async function compileLlamaCpp(buildOptions: BuildOptions, compileOptions
                     cmakeCustomOptions.set("GGML_VULKAN", "1");
 
                 if (buildOptions.gpu === "sycl" && !cmakeCustomOptions.has("GGML_SYCL")) {
-                    cmakeCustomOptions.set("GGML_SYCL", "ON");
-                    if (platform === "win") {
-                        cmakeCustomOptions.set("CMAKE_C_COMPILER", "icx");
-                        cmakeCustomOptions.set("CMAKE_CXX_COMPILER", "icx");
-                    }
+                    cmakeCustomOptions.set("GGML_SYCL", "1");
+                    cmakeCustomOptions.set("CMAKE_C_COMPILER", "icx");
+                    cmakeCustomOptions.set("CMAKE_CXX_COMPILER", "icx");
                 }
 
                 if (!cmakeCustomOptions.has("GGML_CCACHE"))
@@ -434,7 +434,8 @@ export async function getPrebuiltBinaryBuildMetadata(folderPath: string, folderN
 async function moveBuildFilesToResultDir(outDirectory: string, canCreateReleaseDir: boolean = true) {
     const binFilesDirPaths = [
         path.join(outDirectory, "bin"),
-        path.join(outDirectory, "llama.cpp", "bin")
+        path.join(outDirectory, "llama.cpp", "bin"),
+        path.join(outDirectory, "bin", "Release")
     ];
     const compiledResultDirPath = path.join(outDirectory, buildConfigType);
     console.log(getConsoleLogPrefix() + `Moving build files to "${compiledResultDirPath}" directory`);
@@ -470,10 +471,7 @@ async function moveBuildFilesToResultDir(outDirectory: string, canCreateReleaseD
         await fs.copy(llamaAddonNodePath, path.join(compiledResultDirPath, "llama-addon.node"), {
             overwrite: false
         });
-    } else {
-        throw new Error(`Could not find llama-addon.node in ${outDirectory}`);
     }
-
 
     await applyResultDirFixes(compiledResultDirPath, path.join(outDirectory, "_temp"));
 
@@ -614,6 +612,7 @@ async function getCmakePathArgs() {
 
 async function getToolchainFileForArch(targetArch: string, windowsLlvmSupport: boolean = false) {
     let toolchainPrefix = "";
+    console.log('getToolchainFileForArch', targetArch, windowsLlvmSupport)
 
     if (process.platform === "win32" && process.arch === "arm64") {
         // a toolchain is needed to cross-compile to arm64 on Windows, and to compile on arm64 on Windows
@@ -640,8 +639,10 @@ function getCmakeGeneratorArgs(targetPlatform: BinaryPlatform, targetArch: strin
         return ["--generator", "Ninja Multi-Config"];
     else if (windowsLlvmSupport && targetPlatform === "win" && process.arch === "x64" && targetArch === "x64")
         return ["--generator", "Ninja Multi-Config"];
-    else if (targetPlatform === "win" && gpu === "sycl")
-        return ["--generator", "Ninja"];
+    //else if (targetPlatform === "win" && gpu === "sycl")
+    //    return ["--generator", "Ninja"];
+    //  return ["--generator", "\"Visual Studio 17 2022\""];
+    
 
     return [];
 }

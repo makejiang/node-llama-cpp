@@ -36,7 +36,7 @@ else()
     add_compile_options(-fexceptions)
 endif()
 
-add_definitions(-DNAPI_VERSION=7)
+add_definitions(-DNAPI_VERSION=8)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(LLAMA_BUILD_COMMON ON)
@@ -103,12 +103,13 @@ if (GGML_VULKAN OR GGML_KOMPUTE)
     else()
         message(FATAL_ERROR "Vulkan was not found")
     endif()
-elseif (GGML_SYCL)    
+elseif (GGML_SYCL)
+    # find_package(IntelSYCL REQUIRED)
     message(STATUS "Using SYCL for GPU info")
 
     list(APPEND GPU_INFO_HEADERS gpuInfo/sycl-gpu-info.h)
     list(APPEND GPU_INFO_SOURCES gpuInfo/sycl-gpu-info.cpp)
-
+    
     add_compile_definitions(GPU_INFO_USE_SYCL)
 
     # SYCL libraries are typically linked by the compiler itself when using icx/icpx
@@ -122,7 +123,8 @@ list(REMOVE_DUPLICATES GPU_INFO_EXTRA_LIBS)
 
 file(GLOB SOURCE_FILES "addon/*.cpp" "addon/**/*.cpp" ${GPU_INFO_SOURCES})
 
-add_library(${PROJECT_NAME} SHARED ${SOURCE_FILES} ${CMAKE_JS_SRC} ${GPU_INFO_HEADERS})
+
+add_library(${PROJECT_NAME} SHARED ${SOURCE_FILES} ${GPU_INFO_HEADERS} ${CMAKE_JS_SRC})
 set_target_properties(${PROJECT_NAME} PROPERTIES PREFIX "" SUFFIX ".node")
 target_link_libraries(${PROJECT_NAME} ${CMAKE_JS_LIB})
 target_link_libraries(${PROJECT_NAME} "llama")

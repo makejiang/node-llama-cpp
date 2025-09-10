@@ -119,15 +119,26 @@ async function testSyclBinary() {
     const require = createRequire(import.meta.url);
     
     // 测试配置
-    const BINARY_PATH = path.join(__dirname, "node_modules", "@node-llama-cpp", "win-x64-sycl", "bins", "win-x64-sycl", "llama-addon.node");
+    const BINARY_PATHS = [
+      path.join(__dirname, "llama", "localBuilds", "win-x64-sycl-Release-b5760", "Release", "llama-addon.node"),
+      path.join(__dirname, "node_modules", "@node-llama-cpp", "win-x64-sycl", "bins", "win-x64-sycl", "llama-addon.node"),
+    ];
     const GPU_TYPE = "sycl";
 
     console.log("=".repeat(80));
     console.log("SYCL Binary Direct Test");
     console.log("=".repeat(80));
-    console.log(`Binary Path: ${BINARY_PATH}`);
+    console.log(`Binary Path: ${BINARY_PATHS}`);
     console.log(`GPU Type: ${GPU_TYPE}`);
     console.log("=".repeat(80));
+
+    // find the first existing binary path of llama-addon.node
+    const BINARY_PATH = BINARY_PATHS.find(p => fs.existsSync(p));
+    if (!BINARY_PATH) {
+        console.error("❌ Could not find llama-addon.node in any of the expected locations:");
+        BINARY_PATHS.forEach(p => console.error(`   - ${p}`));
+        throw new Error(`Binary file does not exist in any expected location`);
+    }
 
     try {
         // 步骤1: 检查文件是否存在

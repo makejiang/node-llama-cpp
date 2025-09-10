@@ -94,12 +94,24 @@ export async function testBindingBinary(
     } {
         if (forkFunction.type === "electron") {
             let exited = false;
-            const subProcess = forkFunction.fork(__filename, [], {
-                env: {
-                    ...process.env,
-                    TEST_BINDING_CP: "true"
-                }
-            });
+            let subProcess: any;
+            
+            try {
+                console.log(getConsoleLogPrefix() + `Creating Electron utility process via utilityProcess.fork`);
+                console.log(getConsoleLogPrefix() + `${__filename}`);
+
+                subProcess = forkFunction.fork(__filename, [], {
+                    env: {
+                        ...process.env,
+                        TEST_BINDING_CP: "true"
+                    },
+                    stdio: "pipe"
+                });
+                console.log(getConsoleLogPrefix() + `Successfully created Electron utility process with PID: ${subProcess.pid}`);
+            } catch (err) {
+                console.error(getConsoleLogPrefix() + `Failed to create Electron utility process:`, err);
+                throw err;
+            }
 
             function cleanupElectronFork() {
                 if (subProcess.pid != null || !exited) {
@@ -113,14 +125,22 @@ export async function testBindingBinary(
             process.on("exit", cleanupElectronFork);
 
             subProcess.on("message", onMessage);
-            subProcess.on("exit", (code) => {
+            subProcess.on("exit", (code: number) => {
+                console.log(getConsoleLogPrefix() + `Electron utility process exited with code: ${code}`);
                 exited = true;
                 cleanupElectronFork();
                 onExit(code);
             });
 
             return {
-                sendMessage: (message: ParentToChildMessage) => subProcess.postMessage(message),
+                sendMessage: (message: ParentToChildMessage) => {
+                    try {
+                        console.log(getConsoleLogPrefix() + `Sending message to Electron utility process: ${JSON.stringify(message)}`);
+                        subProcess.postMessage(message);
+                    } catch (err) {
+                        console.error(getConsoleLogPrefix() + `Failed to send message to Electron utility process:`, err);
+                    }
+                },
                 killProcess: cleanupElectronFork,
                 pipeMessages: () => void 0
             };
@@ -234,6 +254,7 @@ export async function testBindingBinary(
 
             subProcess = createTestProcess({
                 onMessage(message: ChildToParentMessage) {
+                    console.log(getConsoleLogPrefix() + `Received message from child process: ${JSON.stringify(message)}`);
                     if (message.type === "ready") {
                         forkSucceeded = true;
                         subProcess!.sendMessage({
@@ -280,6 +301,7 @@ if (process.env.TEST_BINDING_CP === "true" && (process.parentPort != null || pro
             try {
                 console.log(getConsoleLogPrefix() + `Attempting to load binding binary: ${message.bindingBinaryPath}`);
                 binding = require(message.bindingBinaryPath);
+                console.log('binding created', binding);
 
                 const errorLogLevel = LlamaLogLevelToAddonLogLevel.get(LlamaLogLevel.error);
                 if (errorLogLevel != null)
@@ -289,6 +311,9 @@ if (process.env.TEST_BINDING_CP === "true" && (process.parentPort != null || pro
                 sendMessage({type: "loaded"});
             } catch (err) {
                 console.error(getConsoleLogPrefix() + `Failed to load binding binary: ${message.bindingBinaryPath}. Error:`, err);
+                if (err instanceof Error && err.stack) {
+                    console.error(getConsoleLogPrefix() + `Error stack:`, err.stack);
+                }
                 process.exit(1);
             }
         } else if (message.type === "test") {
@@ -306,6 +331,8 @@ if (process.env.TEST_BINDING_CP === "true" && (process.parentPort != null || pro
                 if (loadedGpu == null || (loadedGpu === false && message.gpu !== false)) {
                     console.log(getConsoleLogPrefix() + `Reloading backends with binary directory: ${path.dirname(path.resolve(message.bindingBinaryPath))}`);
                     binding.loadBackends(path.dirname(path.resolve(message.bindingBinaryPath)));
+                    const reloadedGpu = binding.getGpuType();
+                    console.log(getConsoleLogPrefix() + `Reloaded GPU type: ${reloadedGpu}`);
                 }
 
                 console.log(getConsoleLogPrefix() + `Initializing binding...`);
@@ -338,6 +365,9 @@ if (process.env.TEST_BINDING_CP === "true" && (process.parentPort != null || pro
                 sendMessage({type: "done"});
             } catch (err) {
                 console.error(getConsoleLogPrefix() + `Binding test failed:`, err);
+                if (err instanceof Error && err.stack) {
+                    console.error(getConsoleLogPrefix() + `Error stack:`, err.stack);
+                }
                 process.exit(1);
             }
         } else if (message.type === "exit") {

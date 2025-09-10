@@ -22,9 +22,17 @@ async function getArcGpuDeviceNames({
     
     try {
       if (platform === "win") {
-        // Use PowerShell Get-CimInstance (modern replacement for WMI)
+        // get the abosulute path to powershell.exe
+        const windir = getWindir();
+        const powershellPath = path.join(windir, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+        if (!(await fs.pathExists(powershellPath))) {
+          console.error(getConsoleLogPrefix() + `PowerShell not found at expected path: ${powershellPath}`);
+          return [];
+        }
+
+        // Use PowerShell Get VideoController VendorID/DeviceID (modern replacement for WMI)
         const { stdout } = await execAsync(
-          `powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-WmiObject Win32_VideoController | ForEach-Object { if ($_.ConfigManagerErrorCode -eq 0 -and $_.PNPDeviceID -match 'VEN_([0-9A-F]{4}).*DEV_([0-9A-F]{4})') { 'Name: ' + $_.Name + ' VID: ' + $matches[1] + ' DeviceID: ' + $matches[2] }}"`,
+          `${powershellPath} -NoProfile -ExecutionPolicy Bypass -Command "Get-WmiObject Win32_VideoController | ForEach-Object { if ($_.ConfigManagerErrorCode -eq 0 -and $_.PNPDeviceID -match 'VEN_([0-9A-F]{4}).*DEV_([0-9A-F]{4})') { 'Name: ' + $_.Name + ' VID: ' + $matches[1] + ' DeviceID: ' + $matches[2] }}"`,
           { encoding: 'utf-8' }
         );
 
