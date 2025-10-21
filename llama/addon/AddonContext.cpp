@@ -393,7 +393,7 @@ AddonContext::AddonContext(const Napi::CallbackInfo& info) : Napi::ObjectWrap<Ad
     context_params.n_threads = std::max(cpu_get_num_math(), 1);
     context_params.n_threads_batch = context_params.n_threads;
     context_params.no_perf = true;
-    context_params.swa_full = false;
+    //context_params.swa_full = false;
 
     if (info.Length() > 1 && info[1].IsObject()) {
         Napi::Object options = info[1].As<Napi::Object>();
@@ -435,9 +435,9 @@ AddonContext::AddonContext(const Napi::CallbackInfo& info) : Napi::ObjectWrap<Ad
             context_params.no_perf = !(options.Get("performanceTracking").As<Napi::Boolean>().Value());
         }
 
-        if (options.Has("swaFullCache")) {
-            context_params.swa_full = options.Get("swaFullCache").As<Napi::Boolean>().Value();
-        }
+        // if (options.Has("swaFullCache")) {
+        //    context_params.swa_full = options.Get("swaFullCache").As<Napi::Boolean>().Value();
+        // }
     }
 }
 AddonContext::~AddonContext() {
@@ -587,7 +587,14 @@ Napi::Value AddonContext::DisposeSequence(const Napi::CallbackInfo& info) {
 
     int32_t sequenceId = info[0].As<Napi::Number>().Int32Value();
 
-    bool result = llama_memory_seq_rm(llama_get_memory(ctx), sequenceId, -1, -1);
+    // bool result = llama_memory_seq_rm(llama_get_memory(ctx), sequenceId, -1, -1);
+
+    // if (!result) {
+    //     Napi::Error::New(info.Env(), "Failed to dispose sequence").ThrowAsJavaScriptException();
+    //     return info.Env().Undefined();
+    // }
+
+    bool result = llama_kv_cache_seq_rm(ctx, sequenceId, -1, -1);
 
     if (!result) {
         Napi::Error::New(info.Env(), "Failed to dispose sequence").ThrowAsJavaScriptException();
@@ -606,7 +613,8 @@ Napi::Value AddonContext::RemoveTokenCellsFromSequence(const Napi::CallbackInfo&
     int32_t startPos = info[1].As<Napi::Number>().Int32Value();
     int32_t endPos = info[2].As<Napi::Number>().Int32Value();
 
-    bool result = llama_memory_seq_rm(llama_get_memory(ctx), sequenceId, startPos, endPos);
+    //bool result = llama_memory_seq_rm(llama_get_memory(ctx), sequenceId, startPos, endPos);
+    bool result = llama_kv_cache_seq_rm(ctx, sequenceId, startPos, endPos);
 
     return Napi::Boolean::New(info.Env(), result);
 }
@@ -621,7 +629,8 @@ Napi::Value AddonContext::ShiftSequenceTokenCells(const Napi::CallbackInfo& info
     int32_t endPos = info[2].As<Napi::Number>().Int32Value();
     int32_t shiftDelta = info[3].As<Napi::Number>().Int32Value();
 
-    llama_memory_seq_add(llama_get_memory(ctx), sequenceId, startPos, endPos, shiftDelta);
+    //llama_memory_seq_add(llama_get_memory(ctx), sequenceId, startPos, endPos, shiftDelta);
+    llama_kv_cache_seq_add(ctx, sequenceId, startPos, endPos, shiftDelta);
 
     return info.Env().Undefined();
 }
@@ -634,7 +643,8 @@ Napi::Value AddonContext::GetSequenceKvCacheMinPosition(const Napi::CallbackInfo
     int32_t sequenceId = info[0].As<Napi::Number>().Int32Value();
 
 
-    const auto minPosition = llama_memory_seq_pos_min(llama_get_memory(ctx), sequenceId);
+    //const auto minPosition = llama_memory_seq_pos_min(llama_get_memory(ctx), sequenceId);
+    const auto minPosition = llama_kv_cache_seq_pos_min(ctx, sequenceId);
 
     return Napi::Number::New(info.Env(), minPosition);
 }
@@ -647,7 +657,8 @@ Napi::Value AddonContext::GetSequenceKvCacheMaxPosition(const Napi::CallbackInfo
     int32_t sequenceId = info[0].As<Napi::Number>().Int32Value();
 
 
-    const auto maxPosition = llama_memory_seq_pos_max(llama_get_memory(ctx), sequenceId);
+    //const auto maxPosition = llama_memory_seq_pos_max(llama_get_memory(ctx), sequenceId);
+    const auto maxPosition = llama_kv_cache_seq_pos_max(ctx, sequenceId);
 
     return Napi::Number::New(info.Env(), maxPosition);
 }

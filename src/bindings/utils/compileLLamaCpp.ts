@@ -639,9 +639,9 @@ function getCmakeGeneratorArgs(targetPlatform: BinaryPlatform, targetArch: strin
         return ["--generator", "Ninja Multi-Config"];
     else if (windowsLlvmSupport && targetPlatform === "win" && process.arch === "x64" && targetArch === "x64")
         return ["--generator", "Ninja Multi-Config"];
-    //else if (targetPlatform === "win" && gpu === "sycl")
-    //    return ["--generator", "Ninja"];
-    //  return ["--generator", "\"Visual Studio 17 2022\""];
+    // remove following code to build node.addon with MSVC on Windows
+    else if (targetPlatform === "win" && gpu === "sycl")
+        return ["--generator", "Ninja"];
     
 
     return [];
