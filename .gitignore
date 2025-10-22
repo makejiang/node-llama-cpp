@@ -23,6 +23,7 @@ node_modules
 /llama/llama.cpp
 /llama/llama.cpp.lock
 /llama/llama.cpp.info.json
+/llama/llama.cpp_*
 /llama/lastBuild.json
 /llama/gitRelease.bundle
 /llama/.temp

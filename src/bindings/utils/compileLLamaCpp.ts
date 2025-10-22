@@ -131,8 +131,8 @@ export async function compileLlamaCpp(buildOptions: BuildOptions, compileOptions
 
                 if (buildOptions.gpu === "sycl" && !cmakeCustomOptions.has("GGML_SYCL")) {
                     cmakeCustomOptions.set("GGML_SYCL", "1");
-                    cmakeCustomOptions.set("CMAKE_C_COMPILER", "icx");
-                    cmakeCustomOptions.set("CMAKE_CXX_COMPILER", "icx");
+                    //cmakeCustomOptions.set("CMAKE_C_COMPILER", "icx");
+                    //cmakeCustomOptions.set("CMAKE_CXX_COMPILER", "icx");
                 }
 
                 if (!cmakeCustomOptions.has("GGML_CCACHE"))
@@ -640,8 +640,8 @@ function getCmakeGeneratorArgs(targetPlatform: BinaryPlatform, targetArch: strin
     else if (windowsLlvmSupport && targetPlatform === "win" && process.arch === "x64" && targetArch === "x64")
         return ["--generator", "Ninja Multi-Config"];
     // remove following code to build node.addon with MSVC on Windows
-    else if (targetPlatform === "win" && gpu === "sycl")
-        return ["--generator", "Ninja"];
+    //else if (targetPlatform === "win" && gpu === "sycl")
+    //    return ["--generator", "Ninja"];
     
 
     return [];
